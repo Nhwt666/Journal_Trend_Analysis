@@ -6,16 +6,62 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/publication.dart';
 import '../providers/bookmark_provider.dart';
 import '../providers/recent_provider.dart';
+import '../services/openalex_service.dart';
 import '../utils/number_format.dart';
 import '../widgets/modern_app_bar.dart';
 
-class PublicationDetailScreen extends StatelessWidget {
+class PublicationDetailScreen extends StatefulWidget {
   const PublicationDetailScreen({super.key, required this.publication});
 
   final Publication publication;
 
+  @override
+  State<PublicationDetailScreen> createState() =>
+      _PublicationDetailScreenState();
+}
+
+class _PublicationDetailScreenState extends State<PublicationDetailScreen> {
+  late Publication _publication;
+  bool _isLoadingFull = false;
+  String? _fetchError;
+
+  @override
+  void initState() {
+    super.initState();
+    _publication = widget.publication;
+    _fetchFullDetails();
+  }
+
+  Future<void> _fetchFullDetails() async {
+    if (_publication.abstractText != null) return;
+
+    setState(() {
+      _isLoadingFull = true;
+      _fetchError = null;
+    });
+
+    try {
+      final service = OpenAlexService();
+      final full = await service.fetchWorkById(_publication.id);
+      service.dispose();
+      if (mounted) {
+        setState(() {
+          _publication = full;
+          _isLoadingFull = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingFull = false;
+          _fetchError = 'Could not load full details.';
+        });
+      }
+    }
+  }
+
   Future<void> _openDoi(BuildContext context) async {
-    final doi = publication.doi;
+    final doi = _publication.doi;
     if (doi == null || doi.isEmpty) return;
     final url = Uri.parse('https://doi.org/$doi');
     try {
@@ -30,28 +76,25 @@ class PublicationDetailScreen extends StatelessWidget {
   }
 
   void _sharePublication() {
-    final doi = publication.doi != null ? 'https://doi.org/${publication.doi}' : '';
-    final text = '${publication.title}\n'
-        'Year: ${publication.year ?? 'N/A'}  |  Citations: ${formatInt(publication.citedByCount)}\n'
-        'Journal: ${publication.journal.name}\n'
+    final doi = _publication.doi != null ? 'https://doi.org/${_publication.doi}' : '';
+    final text = '${_publication.title}\n'
+        'Year: ${_publication.year ?? 'N/A'}  |  Citations: ${formatInt(_publication.citedByCount)}\n'
+        'Journal: ${_publication.journal.name}\n'
         '$doi';
-    Share.share(text, subject: publication.title);
+    Share.share(text, subject: _publication.title);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Record this paper in the recent-history list exactly once per
-    // mount. Post-frame callback avoids triggering notifyListeners
-    // during build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!context.mounted) return;
-      context.read<RecentProvider>().trackPublication(publication);
+      context.read<RecentProvider>().trackPublication(_publication);
     });
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final bookmarks = context.watch<BookmarkProvider>();
-    final isBookmarked = bookmarks.isBookmarked(publication.id);
+    final isBookmarked = bookmarks.isBookmarked(_publication.id);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
@@ -65,7 +108,7 @@ class PublicationDetailScreen extends StatelessWidget {
               color: isBookmarked ? colorScheme.primary : null,
             ),
             tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark',
-            onTap: () => bookmarks.toggle(publication),
+            onTap: () => bookmarks.toggle(_publication),
           ),
           _DetailActionButton(
             icon: const Icon(Icons.share),
@@ -102,7 +145,7 @@ class PublicationDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      if (publication.year != null)
+                      if (_publication.year != null)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
@@ -111,7 +154,7 @@ class PublicationDetailScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            publication.year.toString(),
+                            _publication.year.toString(),
                             style: TextStyle(
                               color: colorScheme.onPrimary,
                               fontSize: 12,
@@ -119,7 +162,7 @@ class PublicationDetailScreen extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (publication.type != null) ...[
+                      if (_publication.type != null) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -129,7 +172,7 @@ class PublicationDetailScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            publication.type!,
+                            _publication.type!,
                             style: TextStyle(
                               color: colorScheme.onSecondaryContainer,
                               fontSize: 12,
@@ -142,7 +185,7 @@ class PublicationDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    publication.title,
+                    _publication.title,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       height: 1.3,
@@ -161,7 +204,7 @@ class PublicationDetailScreen extends StatelessWidget {
                   child: _StatCard(
                     icon: Icons.format_quote,
                     label: 'Citations',
-                    value: formatInt(publication.citedByCount),
+                    value: formatInt(_publication.citedByCount),
                     color: Colors.orange,
                     colorScheme: colorScheme,
                   ),
@@ -171,9 +214,9 @@ class PublicationDetailScreen extends StatelessWidget {
                   child: _StatCard(
                     icon: Icons.person_outline,
                     label: 'Authors',
-                    value: publication.authors.isEmpty
+                    value: _publication.authors.isEmpty
                         ? 'N/A'
-                        : publication.authors.length.toString(),
+                        : _publication.authors.length.toString(),
                     color: Colors.purple,
                     colorScheme: colorScheme,
                   ),
@@ -189,7 +232,7 @@ class PublicationDetailScreen extends StatelessWidget {
                   child: _StatCard(
                     icon: Icons.menu_book_outlined,
                     label: 'Journal',
-                    value: publication.journal.name,
+                    value: _publication.journal.name,
                     color: Colors.teal,
                     colorScheme: colorScheme,
                   ),
@@ -199,7 +242,7 @@ class PublicationDetailScreen extends StatelessWidget {
                   child: _StatCard(
                     icon: Icons.language,
                     label: 'Language',
-                    value: _getLanguageName(publication.language),
+                    value: _getLanguageName(_publication.language),
                     color: Colors.blue,
                     colorScheme: colorScheme,
                   ),
@@ -211,15 +254,15 @@ class PublicationDetailScreen extends StatelessWidget {
 
             // ── Citation Bar Chart ─────────────────────────────
             _CitationChart(
-              citedByCount: publication.citedByCount,
-              year: publication.year,
+              citedByCount: _publication.citedByCount,
+              year: _publication.year,
               colorScheme: colorScheme,
             ),
 
             const SizedBox(height: 24),
 
             // ── Authors Section ─────────────────────────────────
-            if (publication.authors.isNotEmpty) ...[
+            if (_publication.authors.isNotEmpty) ...[
               _SectionHeader(
                 icon: Icons.people_outline,
                 title: 'Authors',
@@ -235,7 +278,7 @@ class PublicationDetailScreen extends StatelessWidget {
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: publication.authors.map((author) {
+                  children: _publication.authors.map((author) {
                     final name = author.displayName ?? author.name;
                     return Chip(
                       avatar: CircleAvatar(
@@ -262,7 +305,7 @@ class PublicationDetailScreen extends StatelessWidget {
             ],
 
             // ── DOI Section ────────────────────────────────────
-            if (publication.doi != null && publication.doi!.isNotEmpty) ...[
+            if (_publication.doi != null && _publication.doi!.isNotEmpty) ...[
               _SectionHeader(
                 icon: Icons.link,
                 title: 'DOI',
@@ -282,7 +325,7 @@ class PublicationDetailScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        publication.doi!,
+                        _publication.doi!,
                         style: TextStyle(
                           fontSize: 13,
                           color: colorScheme.primary,
@@ -322,30 +365,30 @@ class PublicationDetailScreen extends StatelessWidget {
                 children: [
                   _InfoRow(
                     label: 'Journal Name',
-                    value: publication.journal.name,
+                    value: _publication.journal.name,
                     colorScheme: colorScheme,
                   ),
-                  if (publication.journal.publisher != null) ...[
+                  if (_publication.journal.publisher != null) ...[
                     const Divider(height: 20),
                     _InfoRow(
                       label: 'Publisher',
-                      value: publication.journal.publisher!,
+                      value: _publication.journal.publisher!,
                       colorScheme: colorScheme,
                     ),
                   ],
-                  if (publication.journal.issn != null) ...[
+                  if (_publication.journal.issn != null) ...[
                     const Divider(height: 20),
                     _InfoRow(
                       label: 'ISSN',
-                      value: publication.journal.issn!,
+                      value: _publication.journal.issn!,
                       colorScheme: colorScheme,
                     ),
                   ],
-                  if (publication.journal.country != null) ...[
+                  if (_publication.journal.country != null) ...[
                     const Divider(height: 20),
                     _InfoRow(
                       label: 'Country',
-                      value: publication.journal.country!,
+                      value: _publication.journal.country!,
                       colorScheme: colorScheme,
                     ),
                   ],
@@ -356,7 +399,7 @@ class PublicationDetailScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // ── Topics / Keywords ──────────────────────────────
-            if (publication.topics.isNotEmpty) ...[
+            if (_publication.topics.isNotEmpty) ...[
               _SectionHeader(
                 icon: Icons.label_outline,
                 title: 'Topics & Keywords',
@@ -366,7 +409,7 @@ class PublicationDetailScreen extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: publication.topics.map((topic) {
+                children: _publication.topics.map((topic) {
                   return Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -404,25 +447,47 @@ class PublicationDetailScreen extends StatelessWidget {
                   color: colorScheme.outline.withAlpha(30),
                 ),
               ),
-              child: SelectableText(
-                publication.abstractText ??
-                    'No abstract available for this publication.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  height: 1.7,
-                  fontStyle: publication.abstractText == null
-                      ? FontStyle.italic
-                      : FontStyle.normal,
-                  color: publication.abstractText == null
-                      ? colorScheme.onSurface.withAlpha(120)
-                      : colorScheme.onSurface,
-                ),
-              ),
+              child: _isLoadingFull
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Loading abstract...',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontStyle: FontStyle.italic,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    )
+                  : SelectableText(
+                      _publication.abstractText ??
+                          (_fetchError ?? 'No abstract available for this publication.'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        height: 1.7,
+                        fontStyle: _publication.abstractText == null
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        color: _publication.abstractText == null
+                            ? colorScheme.onSurface.withAlpha(120)
+                            : colorScheme.onSurface,
+                      ),
+                    ),
             ),
 
             const SizedBox(height: 32),
 
             // ── Open in Browser CTA ────────────────────────────
-            if (publication.doi != null && publication.doi!.isNotEmpty)
+            if (_publication.doi != null && _publication.doi!.isNotEmpty)
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -480,7 +545,7 @@ class PublicationDetailScreen extends StatelessWidget {
   }
 
   Future<void> _openOpenAlex(BuildContext context) async {
-    final id = publication.id;
+    final id = _publication.id;
     final url = Uri.parse('https://openalex.org/works/$id');
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);

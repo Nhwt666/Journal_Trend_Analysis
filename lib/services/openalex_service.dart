@@ -288,6 +288,51 @@ class OpenAlexService {
         .toList();
   }
 
+  /// Fetch a single work by its OpenAlex ID with full details including
+  /// abstract_inverted_index. Used when navigating to the detail screen
+  /// so the user sees the full abstract.
+  Future<Publication> fetchWorkById(String workId) async {
+    _shouldRetryTimeout = false;
+
+    final shortId = workId.contains('/') ? workId.split('/').last : workId;
+    final params = <String, String>{
+      'select': 'id,doi,title,publication_year,cited_by_count,type,'
+          'primary_location,locations,authorships,topics,language,'
+          'abstract_inverted_index',
+    };
+
+    final uri = Uri.parse('$_baseUrl/works/$shortId')
+        .replace(queryParameters: params);
+
+    http.Response response;
+    try {
+      final request = http.Request('GET', uri)..headers.addAll(_headers);
+      final streamedResponse =
+          await _client.send(request).timeout(AppConfig.httpTimeout);
+      response = await http.Response.fromStream(streamedResponse)
+          .timeout(AppConfig.httpTimeout);
+    } on TimeoutException {
+      if (!_shouldRetryTimeout) {
+        _shouldRetryTimeout = true;
+        return fetchWorkById(workId);
+      }
+      throw const ApiError('Request timed out. Check your connection and try again.');
+    } catch (e) {
+      _shouldRetryTimeout = false;
+      throw ApiError('Network error: $e');
+    }
+
+    if (response.statusCode != 200) {
+      throw ApiError(
+        'OpenAlex returned ${response.statusCode}',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return Publication.fromJson(body);
+  }
+
   void dispose() {
     _client.close();
   }

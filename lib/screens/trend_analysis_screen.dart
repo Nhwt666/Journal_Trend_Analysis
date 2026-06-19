@@ -251,7 +251,7 @@ class _TopCitedTab extends StatelessWidget {
           rank: i + 1,
           title: p.title,
           subtitle:
-              '${p.year ?? 'N/A'} • ${p.journal.name} • ${formatCompact(p.citedByCount)} citations',
+              '${p.year ?? 'N/A'} • ${p.journal.displayName} • ${formatCompact(p.citedByCount)} citations',
           onTap: () => Navigator.push(
             ctx,
             MaterialPageRoute(
@@ -279,7 +279,14 @@ class _TopJournalsTab extends StatelessWidget {
       return const EmptyView(message: 'No journal data.');
     }
 
-    final maxValue = entries.first.value.toDouble();
+    // fl_chart requires maxY > 0; guard against empty corpus, all-zero
+    // values, or single-row data so the chart never crashes.
+    final maxValue = entries
+        .map((e) => e.value)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final maxY = maxValue <= 0 ? 1.0 : maxValue.toDouble();
+    // Ensure interval is at least 1 to avoid infinite height issues
+    final interval = maxY <= 5 ? 1.0 : (maxY / 5).ceilToDouble().clamp(1.0, maxY);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -296,6 +303,7 @@ class _TopJournalsTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Container(
+            height: 300,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
@@ -309,10 +317,10 @@ class _TopJournalsTab extends StatelessWidget {
               ],
             ),
             child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: maxValue * 1.2,
-                barGroups: [
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxY * 1.2,
+                  barGroups: [
                   for (var i = 0; i < entries.length; i++)
                     BarChartGroupData(
                       x: i,
@@ -341,7 +349,7 @@ class _TopJournalsTab extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 32,
-                      interval: 1,
+                      interval: interval,
                       getTitlesWidget: (v, _) => Text(
                         v.toInt().toString(),
                         style: TextStyle(

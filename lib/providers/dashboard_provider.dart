@@ -60,6 +60,22 @@ class DashboardProvider extends ChangeNotifier {
     _topAuthors = _allAuthors.take(5).toList();
     _searchQuery = query;
     _apiTotalCount = apiTotalCount;
+    debugPrint(
+      '[Dashboard] pubs=${pubs.length} topJournals=${_topJournals.length} '
+      'topCited=${_topCited.length} allAuthors=${_allAuthors.length}',
+    );
+    if (_topJournals.isEmpty) {
+      final withJournal = pubs.where((p) => p.journal.name.isNotEmpty).length;
+      debugPrint(
+        '[Dashboard] WARN: no journals; '
+        'pubsWithJournalName=$withJournal/${pubs.length}',
+      );
+    } else {
+      debugPrint(
+        '[Dashboard] topJournals sample: '
+        '${_topJournals.take(3).map((e) => "${e.key}=${e.value}").toList()}',
+      );
+    }
     notifyListeners();
   }
 

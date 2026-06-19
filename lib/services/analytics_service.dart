@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/author_count.dart';
 import '../models/dashboard_stats.dart';
 import '../models/publication.dart';
@@ -29,7 +30,13 @@ class AnalyticsService {
     final map = <String, int>{};
     for (final p in pubs) {
       final name = p.journal.name;
-      if (name.isEmpty) continue;
+      // Skip papers with no real journal: empty, the placeholder
+      // string used by Journal.fromJson, or null-ish whitespace.
+      if (name.isEmpty ||
+          name == 'Unknown Journal' ||
+          name.trim().isEmpty) {
+        continue;
+      }
       map[name] = (map[name] ?? 0) + 1;
     }
     final list = map.entries.toList()

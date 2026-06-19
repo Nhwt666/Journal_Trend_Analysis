@@ -13,8 +13,14 @@ class Journal {
     this.country,
   });
 
+  /// Display name for the UI. Returns "Unknown Journal" when the
+  /// OpenAlex record was missing `display_name` so that user-facing
+  /// surfaces (cards, detail screen) never show a blank string.
+  String get displayName =>
+      (name.isEmpty) ? 'Unknown Journal' : name;
+
   factory Journal.fromJson(Map<String, dynamic>? json) {
-    if (json == null) return const Journal(id: '', name: 'Unknown Journal');
+    if (json == null) return const Journal(id: '', name: '');
     final name = (json['display_name'] as String?)?.trim();
 
     String? publisher;
@@ -33,7 +39,7 @@ class Journal {
 
     return Journal(
       id: (json['id'] as String?) ?? '',
-      name: (name != null && name.isNotEmpty) ? name : 'Unknown Journal',
+      name: (name != null && name.isNotEmpty) ? name : '',
       issn: (json['issn_l'] as String?),
       publisher: publisher,
       country: country,

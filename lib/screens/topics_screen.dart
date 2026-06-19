@@ -51,18 +51,18 @@ class _TopicsScreenState extends State<TopicsScreen> {
     FocusScope.of(context).unfocus();
     final search = context.read<SearchProvider>();
     context.read<RecentProvider>().trackTopic(topic);
-    search.search(topic.displayName).then((_) {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SearchScreen(
-            topic: topic,
-            initialQuery: topic.displayName,
-          ),
+    // Reset provider state before navigating so the new screen always
+    // starts from a clean slate and the header shows the topic name.
+    search.clear();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SearchScreen(
+          topic: topic,
+          initialQuery: topic.displayName,
         ),
-      );
-    });
+      ),
+    );
   }
 
   @override

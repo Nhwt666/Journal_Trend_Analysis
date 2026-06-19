@@ -58,7 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
       sp.loadHistory();
       if (widget.initialQuery != null &&
           widget.initialQuery!.trim().isNotEmpty &&
-          sp.query != widget.initialQuery) {
+          !sp.hasResults) {
         if (widget.topic != null) {
           sp.setActiveTopic(widget.topic);
         }
@@ -251,8 +251,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      activeTopic?.category ??
-                          (search.hasResults
+                      activeTopic != null
+                          ? (activeTopic.category.isNotEmpty
+                              ? activeTopic.category
+                              : 'Filtering by topic')
+                          : (search.hasResults
                               ? '${search.totalCount} publications'
                               : 'Discover academic research'),
                       style: TextStyle(
@@ -327,6 +330,36 @@ class _SearchScreenState extends State<SearchScreen> {
                   search.clearActiveTopic();
                   Navigator.maybePop(context);
                 },
+              ),
+            ),
+          if (search.status != SearchStatus.idle)
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 4),
+              child: _InlineSearchBox(
+                controller: _controller,
+                onSubmitted: (q) {
+                  if (q.trim().isEmpty) return;
+                  FocusScope.of(context).unfocus();
+                  final sp = context.read<SearchProvider>();
+                  if (sp.activeTopic != null) {
+                    // Keep results inside the active topic; the topic
+                    // pill stays so the user never loses context.
+                    sp.searchWithinTopic(q.trim());
+                  } else {
+                    sp.search(q.trim());
+                  }
+                },
+                onClear: () {
+                  _controller.clear();
+                  if (search.query.isNotEmpty) {
+                    context.read<SearchProvider>().clear();
+                    context.read<DashboardProvider>().reset();
+                  }
+                },
+                hintText: activeTopic != null
+                    ? 'Refine within ${activeTopic.displayName}…'
+                    : 'Search publications…',
+                isDark: Theme.of(context).brightness == Brightness.dark,
               ),
             ),
         ],
@@ -853,7 +886,7 @@ class _ResultsBody extends StatelessWidget {
                           clearFromYear: true,
                           clearToYear: true,
                         ));
-                        search.search(search.query);
+                        search.refreshCurrent();
                       },
                     ),
                   if (search.filters.minCitations > 0)
@@ -861,7 +894,7 @@ class _ResultsBody extends StatelessWidget {
                       label: '>${search.filters.minCitations} citations',
                       onRemove: () {
                         search.setFilters(search.filters.copyWith(minCitations: 0));
-                        search.search(search.query);
+                        search.refreshCurrent();
                       },
                     ),
                   if (search.filters.type != null)
@@ -869,7 +902,7 @@ class _ResultsBody extends StatelessWidget {
                       label: search.filters.type!.replaceAll('-', ' '),
                       onRemove: () {
                         search.setFilters(search.filters.copyWith(clearType: true));
-                        search.search(search.query);
+                        search.refreshCurrent();
                       },
                     ),
                 ],
@@ -880,9 +913,7 @@ class _ResultsBody extends StatelessWidget {
         // Results list
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () async {
-              await context.read<SearchProvider>().search(search.query);
-            },
+            onRefresh: () => search.refreshCurrent(),
             child: ListView.separated(
               controller: scrollController,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -1014,6 +1045,119 @@ class _ModernShimmer extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Inline Search Box (shown inside SearchScreen) ───────────
+
+class _InlineSearchBox extends StatefulWidget {
+  const _InlineSearchBox({
+    required this.controller,
+    required this.onSubmitted,
+    required this.onClear,
+    required this.hintText,
+    required this.isDark,
+  });
+
+  final TextEditingController controller;
+  final void Function(String) onSubmitted;
+  final VoidCallback onClear;
+  final String hintText;
+  final bool isDark;
+
+  @override
+  State<_InlineSearchBox> createState() => _InlineSearchBoxState();
+}
+
+class _InlineSearchBoxState extends State<_InlineSearchBox> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withAlpha(10),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: widget.controller,
+        textInputAction: TextInputAction.search,
+        onSubmitted: widget.onSubmitted,
+        style: TextStyle(
+          fontSize: 14,
+          color: colorScheme.onSurface,
+        ),
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          hintStyle: TextStyle(
+            fontSize: 14,
+            color: colorScheme.onSurface.withAlpha(110),
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: colorScheme.primary,
+            size: 20,
+          ),
+          suffixIcon: widget.controller.text.isNotEmpty
+              ? IconButton(
+                  icon: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: colorScheme.onSurface.withAlpha(150),
+                  ),
+                  onPressed: widget.onClear,
+                )
+              : null,
+          isDense: true,
+          filled: true,
+          fillColor: widget.isDark
+              ? const Color(0xFF1E1E2E).withAlpha(200)
+              : Colors.white.withAlpha(240),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: colorScheme.outline.withAlpha(30),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: colorScheme.primary.withAlpha(100),
+              width: 2,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
           ),
         ),
       ),

@@ -24,6 +24,7 @@ class SearchFilters {
     this.toYear,
     this.minCitations = 0,
     this.type,
+    this.topicId,
   });
 
   final int? fromYear;
@@ -31,23 +32,36 @@ class SearchFilters {
   final int minCitations;
   final String? type;
 
+  /// When non-null, restricts results to works that are tagged with
+  /// this OpenAlex topic id. The id is the short form (e.g. `T1234`)
+  /// and is sent as the `primary_topic.id` filter so OpenAlex only
+  /// returns papers inside the topic.
+  final String? topicId;
+
   bool get isActive =>
-      fromYear != null || toYear != null || minCitations > 0 || type != null;
+      fromYear != null ||
+      toYear != null ||
+      minCitations > 0 ||
+      type != null ||
+      topicId != null;
 
   SearchFilters copyWith({
     int? fromYear,
     int? toYear,
     int? minCitations,
     String? type,
+    String? topicId,
     bool clearFromYear = false,
     bool clearToYear = false,
     bool clearType = false,
+    bool clearTopicId = false,
   }) {
     return SearchFilters(
       fromYear: clearFromYear ? null : (fromYear ?? this.fromYear),
       toYear: clearToYear ? null : (toYear ?? this.toYear),
       minCitations: minCitations ?? this.minCitations,
       type: clearType ? null : (type ?? this.type),
+      topicId: clearTopicId ? null : (topicId ?? this.topicId),
     );
   }
 
@@ -116,7 +130,7 @@ class OpenAlexService {
       //   - ids.openalex etc.       (we use the work id)
       //   - open_access              (unused)
       'select': 'id,doi,title,publication_year,cited_by_count,type,'
-          'primary_location,authorships,topics,language',
+          'primary_location,locations,authorships,topics,language',
     };
 
     // Build filter string for OpenAlex
@@ -133,6 +147,13 @@ class OpenAlexService {
     }
     if (filters.type != null) {
       filterParts.add('doc_type:${filters.type}');
+    }
+    if (filters.topicId != null && filters.topicId!.isNotEmpty) {
+      // Normalise to the short form (e.g. "T1234") so the caller can
+      // pass either the full URL or the bare id.
+      final id = filters.topicId!;
+      final short = id.contains('/') ? id.split('/').last : id;
+      filterParts.add('topics.id:$short');
     }
 
     if (filterParts.isNotEmpty) {

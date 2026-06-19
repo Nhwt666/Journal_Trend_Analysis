@@ -59,7 +59,7 @@ class PublicationCard extends StatelessWidget {
                       Expanded(
                         child: _MetaChip(
                           icon: Icons.menu_book,
-                          text: publication.journal.name,
+                          text: publication.journal.displayName,
                           colorScheme: colorScheme,
                           flexible: true,
                         ),

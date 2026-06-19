@@ -46,6 +46,23 @@ class Publication {
   static Publication _fromJson(Map<String, dynamic> json, {required bool full}) {
     final primaryLocation = json['primary_location'] as Map<String, dynamic>?;
     final source = primaryLocation?['source'] as Map<String, dynamic>?;
+    // Try locations as fallback for journal info
+    final locations = (json['locations'] as List?) ?? const [];
+    Map<String, dynamic>? journalSource;
+    if (source != null) {
+      journalSource = source;
+    } else if (locations.isNotEmpty) {
+      // Try to find the first location with a valid source
+      for (final loc in locations) {
+        if (loc is Map<String, dynamic>) {
+          final locSource = loc['source'] as Map<String, dynamic>?;
+          if (locSource != null && (locSource['display_name'] as String?)?.isNotEmpty == true) {
+            journalSource = locSource;
+            break;
+          }
+        }
+      }
+    }
     final doiRaw = json['doi'] as String?;
     final doi = doiRaw?.replaceFirst('https://doi.org/', '').trim();
 
@@ -69,7 +86,7 @@ class Publication {
         title: _cleanTitle(json['title'] as String? ?? 'Untitled'),
         doi: (doi != null && doi.isNotEmpty) ? doi : null,
         year: _parseYear(json['publication_year']),
-        journal: Journal.fromJson(source),
+        journal: Journal.fromJson(journalSource),
         citedByCount: (json['cited_by_count'] as num?)?.toInt() ?? 0,
         authors: authorsJson
             .map((e) => Author.fromJson(e as Map<String, dynamic>))
@@ -92,7 +109,7 @@ class Publication {
       title: _cleanTitle(json['title'] as String? ?? 'Untitled'),
       doi: (doi != null && doi.isNotEmpty) ? doi : null,
       year: _parseYear(json['publication_year']),
-      journal: Journal.fromJson(source),
+      journal: Journal.fromJson(journalSource),
       citedByCount: (json['cited_by_count'] as num?)?.toInt() ?? 0,
       abstractText: _reconstructAbstract(
         json['abstract_inverted_index'] as Map<String, dynamic>?,
@@ -100,7 +117,7 @@ class Publication {
       authors: authorsJson
           .map((e) => Author.fromJson(e as Map<String, dynamic>))
           .toList(),
-      landingPageUrl: source?['homepage_url'] as String?,
+      landingPageUrl: journalSource?['homepage_url'] as String?,
       type: docType,
       language: (langRaw != null && langRaw.isNotEmpty) ? langRaw : null,
       topics: topicsJson
